@@ -1,5 +1,5 @@
 # Event-view-ms
 
 zagon mikrostoritve:  
-venv\Scripts\Activate
-unicorn app.main:app --reload
+venv\Scripts\Activate  
+uvicorn app.main:app --reload

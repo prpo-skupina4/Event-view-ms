@@ -1,23 +1,28 @@
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
-from datetime import time
+from datetime import datetime
 
 
 class Predmet(BaseModel):
-    id_predmet: int
+    predmet_id: int
+    oznaka: str
     ime: str
-    oznaka: int 
 
 class Termin(BaseModel):
     termin_id: int
     predmet: Predmet
-    zacetek: time
-    konec: time
-    dan: int
+    zacetek: datetime
+    konec: datetime
+    dan:int
     lokacija: str
-    tip:int
+    tip:str
 
 
 class Urnik(BaseModel):
-    user_id: int
+    uporabnik_id: int #ali rabim userja ali samo njegov id?
     termini: List[Termin]
+
+class Zahteve(BaseModel):
+    zacetek: Optional[datetime] = None
+    konec: Optional[datetime] = None
+    prosti_dnevi: Optional[List[str]] = None
