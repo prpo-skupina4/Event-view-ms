@@ -52,7 +52,7 @@ async def dodaj(uporabnik_id: int, db: AsyncSession = Depends(get_db)): #ko hoč
     await db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
 
     async with httpx.AsyncClient(timeout=20.0) as client:
-        r = await client.get(f"{ICAL_BASE_URL}/urniki/{uporabnik_id}/dodaj")
+        r = await client.get(f"{ICAL_BASE_URL}/podatki/uporabnik/{uporabnik_id}")
     if r.status_code != 200:
         raise HTTPException(502, f"iCal service failed ({r.status_code})")
     
@@ -70,13 +70,33 @@ async def dodaj(uporabnik_id: int, db: AsyncSession = Depends(get_db)): #ko hoč
         res = await db.execute(select(PredmetiDB).where(PredmetiDB.predmet_id == predmet_id))
         
         p = res.scalar_one_or_none()
-        if p is None:
+        if p is None:#dodamo predmet in njegove termine, če ga še ni
             ime = predmet["ime"]
             oznaka = predmet["oznaka"]
             p = PredmetiDB(predmet_id = predmet_id, oznaka=oznaka, ime=ime)
             db.add(p)
             await db.flush()
             predmeti_dodani += 1
+
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                vsi_termini = await client.get(f"{ICAL_BASE_URL}/podatki/termini/{predmet_id}")
+            if vsi_termini.status_code != 200:
+                raise HTTPException(502, f"iCal service failed ({r.status_code})")
+
+            vsi_termini=odg = vsi_termini.json()
+
+            for f in vsi_termini:
+                termin_db = TerminiDB(
+                    termin_id = f["termin_id"],
+                    predmet_id=predmet_id,
+                    zacetek=datetime.fromisoformat(f["zacetek"]),
+                    konec=datetime.fromisoformat(f["konec"]),
+                    lokacija=f["lokacija"],
+                    tip=f["tip"],
+                )
+                db.add(termin_db)
+                await db.flush()
+                termini_dodani += 1
 
         zacetek = datetime.fromisoformat(t["zacetek"])
         konec = datetime.fromisoformat(t["konec"])
@@ -94,6 +114,7 @@ async def dodaj(uporabnik_id: int, db: AsyncSession = Depends(get_db)): #ko hoč
         )
         res2 = await db.execute(q)
         termin_db = res2.scalar_one_or_none()
+        #če slučajno ni termina uporabnika, ga dodamo
         if termin_db is None:
             termin_db = TerminiDB(
                 termin_id = termin_id,
@@ -106,8 +127,8 @@ async def dodaj(uporabnik_id: int, db: AsyncSession = Depends(get_db)): #ko hoč
             db.add(termin_db)
             await db.flush()
             termini_dodani += 1
-        
         db.add(UrnikiDB(uporabnik_id=uporabnik_id, termin_id=termin_id))
+        
         povezave += 1
     
     await db.commit()
