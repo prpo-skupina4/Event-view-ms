@@ -5,3 +5,9 @@ aiosqlite
 requests
 httpx
 icalendar
+python-dotenv
+pytest
+pytest-asyncio
+respx
+alembic
+aioodbc
