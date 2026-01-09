@@ -30,7 +30,7 @@ class Urnik(BaseModel):
 
 class Pavza(BaseModel):
     zacetek:time
-    dolzina: time
+    dolzina: int
     dan:int
 
 class VajeZahteva(BaseModel):#zahteva je samo za vaje

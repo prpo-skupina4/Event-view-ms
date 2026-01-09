@@ -20,6 +20,10 @@ urniki = APIRouter()
 ICAL_BASE_URL = os.getenv("ICAL_URL")
 OPTIMIZER_URL = os.getenv("OPTIMIZER_URL")
 
+@urniki.get("/health")
+def health():
+    return {"status": "ok"}
+
 #vrne shranjen urnik uporabnika
 @urniki.get('/{uporabnik_id}', response_model = Urnik)
 async def index(uporabnik_id:int, db: AsyncSession = Depends(get_db)):#z dependency db odpreš sejo
@@ -66,8 +70,6 @@ async def dodaj(uporabnik_id: int, db: AsyncSession = Depends(get_db)): #ko hoč
         raise HTTPException(502, f"iCal service failed ({r.status_code})")
     
     odg = r.json()   # {"user_id":..., "termini":[...]}]
-    
-    uporabnik_id = odg["uporabnik_id"]
     termini = odg["termini"]
     predmeti_dodani = 0
     termini_dodani = 0
@@ -365,6 +367,4 @@ async def optimize(uporabnik_id:int, zahteve:Zahteve, db: AsyncSession = Depends
     return sporocilo
 
 
-@urniki.get("/health")
-def health():
-    return {"status": "ok"}
+

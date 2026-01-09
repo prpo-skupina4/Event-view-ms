@@ -3,13 +3,15 @@ import pytest
 import respx
 from httpx import Response
 
+
 from app.db.models import PredmetiDB
 
 @pytest.mark.anyio
 @respx.mock
 async def test_dodaj_calls_ical_and_creates_subjects(client, db_session):
+    await db_session.commit()
     # iCal mock: uporabnik dobi 1 termin iz predmeta 1
-    respx.get("http://ical.test/podatki/uporabnik/7").mock(
+    respx.get("http://ical:8000/podatki/uporabnik/7").mock(
         return_value=Response(
             200,
             json={
@@ -30,7 +32,7 @@ async def test_dodaj_calls_ical_and_creates_subjects(client, db_session):
     )
 
     # iCal mock: vsi termini predmeta 1 (da endpoint napolni TerminiDB)
-    respx.get("http://ical.test/podatki/termini/1").mock(
+    respx.get("http://ical:8000/podatki/termini/1").mock(
         return_value=Response(
             200,
             json=[

@@ -1,11 +1,23 @@
 # tests/integration/test_get_urnik.py
 import pytest
 from datetime import time
+from sqlalchemy import delete
 
 from app.db.models import PredmetiDB, TerminiDB, UrnikiDB
 
 @pytest.mark.anyio
 async def test_get_urnik_sorted_by_day_and_time(client, db_session):
+
+    await db_session.execute(
+        delete(PredmetiDB).where(PredmetiDB.predmet_id == 1)
+    )
+    await db_session.execute(
+        delete(TerminiDB).where(TerminiDB.predmet_id == 1)
+    )
+    await db_session.execute(
+        delete(UrnikiDB).where(UrnikiDB.uporabnik_id == 42)
+    )
+    await db_session.commit()
     # seed DB: 1 predmet, 2 termina (out of order), 2 povezavi v UrnikiDB
     p = PredmetiDB(predmet_id=1, oznaka="PRPO", ime="PRPO")
     db_session.add(p)
