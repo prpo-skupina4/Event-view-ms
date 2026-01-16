@@ -14,12 +14,12 @@ class Aktivnost(BaseModel):
     ime:str
 
 class Termin(BaseModel):
-    termin_id: int
+    termin_id: Optional[int] = None
     zacetek: time
     dolzina: int
     dan:int
-    lokacija: str
-    tip:str
+    lokacija: Optional[str] = None
+    tip: Optional[str] = None
     predmet: Optional[Predmet] = None
     aktivnost: Optional[Aktivnost] = None
 
@@ -46,7 +46,6 @@ class Zahteve(BaseModel):
     pavze: List[Pavza]
     vaje:List[VajeZahteva]
     min_pavze: bool = False
-    kosilo: bool = False
 
 class OptimizeRequest(BaseModel):
     uporabnik_id: int

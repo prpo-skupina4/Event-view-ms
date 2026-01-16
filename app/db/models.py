@@ -19,9 +19,9 @@ class TerminiDB(Base):
     zacetek: Mapped[time] = mapped_column(Time, index=True)
     dolzina: Mapped[int] = mapped_column(Integer, index=True)
     dan:Mapped[int] = mapped_column(Integer, index=True)
-    lokacija: Mapped[str] = mapped_column(String(50))
-    tip: Mapped[str] = mapped_column(String(50)) #vaje, predavanje, drugo
-    
+    lokacija: Mapped[str] = mapped_column(String(50), nullable=True)
+    tip: Mapped[str] = mapped_column(String(50), nullable=True) #vaje, predavanje, drugo
+
 class AktivnostiDB(Base):
     __tablename__ = "aktivnosti"
 

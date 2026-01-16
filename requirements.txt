@@ -11,3 +11,5 @@ pytest-asyncio
 respx
 alembic
 aioodbc
+python-jose[cryptography]
+passlib[bcrypt]

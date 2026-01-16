@@ -1,24 +1,50 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List
 from datetime import datetime
 from app.api.models import *
 import requests
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete,or_ , and_
+from sqlalchemy import select, delete,or_ , and_, func
 from sqlalchemy.orm import selectinload 
 from app.db.database import get_db
 from app.db.models import *
 import httpx
 from dotenv import load_dotenv
 from fastapi.encoders import jsonable_encoder
+from fastapi.security import OAuth2PasswordBearer
+from fastapi.encoders import jsonable_encoder
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
 
-
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")#dobimo token?
 load_dotenv()
+JWT_SECRET = os.getenv("JWT_SECRET", "DEV_SECRET")
+ALGORITHM = "HS256"
+
+
 
 urniki = APIRouter()
 ICAL_BASE_URL = os.getenv("ICAL_URL")
 OPTIMIZER_URL = os.getenv("OPTIMIZER_URL")
+
+#za varnost
+def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
+    if not JWT_SECRET:
+        raise RuntimeError("JWT_SECRET ni nastavljen")
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+        sub = payload.get("sub")
+        if sub is None:
+            raise HTTPException(status_code=401, detail="Token nima sub")
+        return int(sub)
+    except (JWTError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+def require_same_user(uporabnik_id: int, user_id_from_token: int) -> None:
+    if uporabnik_id != user_id_from_token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
 
 @urniki.get("/health")
 def health():
@@ -50,7 +76,7 @@ async def index(uporabnik_id:int, db: AsyncSession = Depends(get_db)):#z depende
                 lokacija=t.lokacija,
                 tip=t.tip,
                 predmet=Predmet(predmet_id=p.predmet_id, oznaka=p.oznaka, ime=p.ime) if p else None,
-                aktivnost=Aktivnost(aktivnost_id=a.aktivnost_id, naziv=a.naziv, opis=a.opis) if a else None,
+                aktivnost=Aktivnost(aktivnost_id=a.aktivnost_id, oznaka=a.oznaka, ime=a.ime) if a else None,
             )
         )
 
@@ -59,8 +85,9 @@ async def index(uporabnik_id:int, db: AsyncSession = Depends(get_db)):#z depende
 
 #dodaj uradni urnik in termine novega uporabnika
 @urniki.post('/{uporabnik_id}/dodaj', status_code = 201)
-async def dodaj(uporabnik_id: int, db: AsyncSession = Depends(get_db)): #ko hočeš shranit urnik
+async def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)): #ko hočeš shranit urnik
     #če hoče resetirat urnik
+    require_same_user(uporabnik_id, user_id)
     await db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
 
     #kliče ical za podatke
@@ -164,8 +191,8 @@ async def dodaj(uporabnik_id: int, db: AsyncSession = Depends(get_db)): #ko hoč
 
 #dodaj predmet/aktivnost + termin
 @urniki.post('/{uporabnik_id}/novTermin', status_code = 201)
-async def nov(uporabnik_id: int, termin: Termin, db: AsyncSession = Depends(get_db)):
-    
+async def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
+    require_same_user(uporabnik_id, user_id)
     predmet = None
     aktivnost = None
 
@@ -267,9 +294,9 @@ async def nov(uporabnik_id: int, termin: Termin, db: AsyncSession = Depends(get_
 
 #shrani nov urnik uporabnika
 @urniki.post('/{uporabnik_id}/shrani', status_code = 201)
-async def shrani(uporabnik_id: int, urnik:Urnik, db: AsyncSession = Depends(get_db)): #ko hočeš shranit urnik
-    if urnik.uporabnik_id != uporabnik_id:
-        raise HTTPException(400, detail="uporabnik_id v poti in body se ne ujemata")
+async def shrani(uporabnik_id: int, urnik:Urnik,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)): #ko hočeš shranit urnik
+    require_same_user(uporabnik_id, user_id)
+    await db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
     uporabnik_id = urnik.uporabnik_id
 
     await db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
@@ -363,8 +390,24 @@ async def optimize(uporabnik_id:int, zahteve:Zahteve, db: AsyncSession = Depends
     async with httpx.AsyncClient(timeout=20.0) as client:
         odg = await client.post(OPTIMIZER_URL,json=jsonable_encoder(sporocilo))
     if odg.status_code != 200:
-       raise HTTPException(status_code=500, detail="optimizator failed")
-    return sporocilo
+        raise HTTPException(status_code=odg.status_code, detail=odg.text)
+
+    return odg.json()
 
 
 
+@urniki.delete("/{uporabnik_id}/odstrani", status_code=200)
+async def odstrani_urnik(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
+   
+    require_same_user(uporabnik_id, user_id)
+    await db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))    # (opcijsko) preveri, koliko zapisov ima uporabnik
+    count_q = select(func.count()).select_from(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id)
+    n = (await db.execute(count_q)).scalar_one()
+
+    # pobriši vse povezave uporabnik -> termin
+    await db.execute(
+        delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id)
+    )
+    await db.commit()
+
+    return {"ok": True, "deleted_rows": int(n)}
