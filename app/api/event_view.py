@@ -17,7 +17,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")#dobimo token?
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 load_dotenv()
 JWT_SECRET = os.getenv("JWT_SECRET", "DEV_SECRET")
 ALGORITHM = "HS256"
@@ -84,7 +84,7 @@ async def index(uporabnik_id:int, db: AsyncSession = Depends(get_db)):#z depende
 
 
 #dodaj uradni urnik in termine novega uporabnika
-@urniki.post('/{uporabnik_id}/dodaj', status_code = 201)
+@urniki.post('/{uporabnik_id}', status_code = 201)
 async def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)): #ko hočeš shranit urnik
     #če hoče resetirat urnik
     require_same_user(uporabnik_id, user_id)
@@ -92,7 +92,7 @@ async def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), d
 
     #kliče ical za podatke
     async with httpx.AsyncClient(timeout=20.0) as client:
-        r = await client.get(f"{ICAL_BASE_URL}/podatki/uporabnik/{uporabnik_id}")
+        r = await client.get(f"{ICAL_BASE_URL}/podatki/uporabniki/{uporabnik_id}")
     if r.status_code != 200:
         raise HTTPException(502, f"iCal service failed ({r.status_code})")
     
@@ -190,7 +190,7 @@ async def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), d
     }
 
 #dodaj predmet/aktivnost + termin
-@urniki.post('/{uporabnik_id}/novTermin', status_code = 201)
+@urniki.post('/{uporabnik_id}/termini', status_code = 201)
 async def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
     require_same_user(uporabnik_id, user_id)
     predmet = None
@@ -293,7 +293,7 @@ async def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_curre
     }
 
 #shrani nov urnik uporabnika
-@urniki.post('/{uporabnik_id}/shrani', status_code = 201)
+@urniki.put('/{uporabnik_id}', status_code = 201)
 async def shrani(uporabnik_id: int, urnik:Urnik,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)): #ko hočeš shranit urnik
     require_same_user(uporabnik_id, user_id)
     await db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
@@ -396,18 +396,45 @@ async def optimize(uporabnik_id:int, zahteve:Zahteve, db: AsyncSession = Depends
 
 
 
-@urniki.delete("/{uporabnik_id}/odstrani", status_code=200)
+@urniki.delete("/{uporabnik_id}", status_code=200)
 async def odstrani_urnik(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
    
     require_same_user(uporabnik_id, user_id)
+
+    user_term_ids_q = select(UrnikiDB.termin_id).where(UrnikiDB.uporabnik_id == uporabnik_id)#vsi termini uporabnika
+    user_term_ids = (await db.execute(user_term_ids_q)).scalars().all()
+
+    if not user_term_ids:
+        return {"ok": True, "deleted_links": 0, "deleted_terms": 0}
+
+
     await db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))    # (opcijsko) preveri, koliko zapisov ima uporabnik
     count_q = select(func.count()).select_from(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id)
     n = (await db.execute(count_q)).scalar_one()
 
-    # pobriši vse povezave uporabnik -> termin
-    await db.execute(
+    only_this_user_terms_q = (
+        select(UrnikiDB.termin_id)
+        .where(UrnikiDB.termin_id.in_(user_term_ids))
+        .group_by(UrnikiDB.termin_id)
+        .having(func.count() == 1)
+    )
+    only_this_user_term_ids = (await db.execute(only_this_user_terms_q)).scalars().all()
+
+    del_links_res = await db.execute(
         delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id)
     )
+    deleted_links = del_links_res.rowcount or 0
+    deleted_terms = 0
+    if only_this_user_term_ids:
+        del_terms_res = await db.execute(
+            delete(TerminiDB).where(TerminiDB.termin_id.in_(only_this_user_term_ids))
+        )
+        deleted_terms = del_terms_res.rowcount or 0
+
     await db.commit()
 
-    return {"ok": True, "deleted_rows": int(n)}
+    return {
+        "ok": True,
+        "deleted_links": int(deleted_links),
+        "deleted_terms": int(deleted_terms),
+    }
