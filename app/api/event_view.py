@@ -25,8 +25,8 @@ ALGORITHM = "HS256"
 
 
 urniki = APIRouter()
-ICAL_BASE_URL = os.getenv("ICAL_URL")
-OPTIMIZER_URL = os.getenv("OPTIMIZER_URL")
+ICAL_BASE_URL = os.getenv("ICAL_URL", "http://ical:8000")
+OPTIMIZER_URL = os.getenv("OPTIMIZER_URL", "http://optimizer:8000/optimizacije/")
 
 #za varnost
 def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
