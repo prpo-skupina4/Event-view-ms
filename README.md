@@ -21,6 +21,6 @@ Okoljske spremenljivke:
 - ICAL_URL
 - OPTIMIZER_URL
 
-Pisanje in brisanje baze zahteva avtentikacijo.
+Pisanje in brisanje baze zahteva avtorizacijo z JWT žetonom.
 
 API Endpoints so opisani v /docs.
