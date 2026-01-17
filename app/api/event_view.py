@@ -6,7 +6,7 @@ import requests
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete,or_ , and_, func
-from sqlalchemy.orm import selectinload 
+from sqlalchemy.orm import selectinload, Session
 from app.db.database import get_db
 from app.db.models import *
 import httpx
@@ -52,7 +52,7 @@ def health():
 
 #vrne shranjen urnik uporabnika
 @urniki.get('/{uporabnik_id}', response_model = Urnik)
-def index(uporabnik_id:int, db: AsyncSession = Depends(get_db)):#z dependency db odpreš sejo
+def index(uporabnik_id:int, db: Session  = Depends(get_db)):#z dependency db odpreš sejo
     q = (
     select(TerminiDB, PredmetiDB, AktivnostiDB)
     .join(UrnikiDB, UrnikiDB.termin_id == TerminiDB.termin_id)
@@ -85,7 +85,7 @@ def index(uporabnik_id:int, db: AsyncSession = Depends(get_db)):#z dependency db
 
 #dodaj uradni urnik in termine novega uporabnika
 @urniki.post('/{uporabnik_id}', status_code = 201)
-def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)): #ko hočeš shranit urnik
+def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: Session  = Depends(get_db)): #ko hočeš shranit urnik
     #če hoče resetirat urnik
     require_same_user(uporabnik_id, user_id)
     db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
@@ -193,7 +193,7 @@ def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: Asy
 
 #dodaj predmet/aktivnost + termin
 @urniki.post('/{uporabnik_id}/termini', status_code = 201)
-def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
+def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_current_user_id), db: Session  = Depends(get_db)):
     require_same_user(uporabnik_id, user_id)
     predmet = None
     aktivnost = None
@@ -296,7 +296,7 @@ def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_current_use
 
 #shrani nov urnik uporabnika
 @urniki.put('/{uporabnik_id}', status_code = 201)
-def shrani(uporabnik_id: int, urnik:Urnik,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)): #ko hočeš shranit urnik
+def shrani(uporabnik_id: int, urnik:Urnik,user_id: int = Depends(get_current_user_id), db: Session  = Depends(get_db)): #ko hočeš shranit urnik
     require_same_user(uporabnik_id, user_id)
     db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
     uporabnik_id = urnik.uporabnik_id
@@ -318,7 +318,7 @@ def shrani(uporabnik_id: int, urnik:Urnik,user_id: int = Depends(get_current_use
 
     
 @urniki.post('/optimizations/{uporabnik_id}')
-def optimize(uporabnik_id:int, zahteve:Zahteve, db: AsyncSession = Depends(get_db)):
+def optimize(uporabnik_id:int, zahteve:Zahteve, db: Session  = Depends(get_db)):
     #klici bazo
     q = (
         select(TerminiDB, PredmetiDB, AktivnostiDB)
@@ -401,7 +401,7 @@ def optimize(uporabnik_id:int, zahteve:Zahteve, db: AsyncSession = Depends(get_d
 
 
 @urniki.delete("/{uporabnik_id}", status_code=200)
-def odstrani_urnik(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
+def odstrani_urnik(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: Session  = Depends(get_db)):
    
     require_same_user(uporabnik_id, user_id)
 
