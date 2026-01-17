@@ -401,33 +401,34 @@ def optimize(uporabnik_id:int, zahteve:Zahteve, db: Session  = Depends(get_db)):
 
 
 @urniki.delete("/{uporabnik_id}", status_code=200)
-def odstrani_urnik(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: Session  = Depends(get_db)):
-   
+def odstrani_urnik(
+    uporabnik_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
     require_same_user(uporabnik_id, user_id)
 
-    user_term_ids_q = select(UrnikiDB.termin_id).where(UrnikiDB.uporabnik_id == uporabnik_id)#vsi termini uporabnika
-    user_term_ids = (db.execute(user_term_ids_q)).scalars().all()
+    user_term_ids = db.execute(
+        select(UrnikiDB.termin_id).where(UrnikiDB.uporabnik_id == uporabnik_id)
+    ).scalars().all()
 
     if not user_term_ids:
         return {"ok": True, "deleted_links": 0, "deleted_terms": 0}
 
-
-    db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))    # (opcijsko) preveri, koliko zapisov ima uporabnik
-    count_q = select(func.count()).select_from(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id)
-    n = (db.execute(count_q)).scalar_one()
-
-    only_this_user_terms_q = (
+    only_this_user_term_ids = db.execute(
         select(UrnikiDB.termin_id)
         .where(UrnikiDB.termin_id.in_(user_term_ids))
         .group_by(UrnikiDB.termin_id)
         .having(func.count() == 1)
-    )
-    only_this_user_term_ids = ( db.execute(only_this_user_terms_q)).scalars().all()
+    ).scalars().all()
 
-    del_links_res =  db.execute(
+    # pobriši povezave
+    del_links_res = db.execute(
         delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id)
     )
     deleted_links = del_links_res.rowcount or 0
+
+    # pobriši termine, ki niso nikjer drugje uporabljeni
     deleted_terms = 0
     if only_this_user_term_ids:
         del_terms_res = db.execute(
@@ -437,8 +438,4 @@ def odstrani_urnik(uporabnik_id: int,user_id: int = Depends(get_current_user_id)
 
     db.commit()
 
-    return {
-        "ok": True,
-        "deleted_links": int(deleted_links),
-        "deleted_terms": int(deleted_terms),
-    }
+    return {"ok": True, "deleted_links": int(deleted_links), "deleted_terms": int(deleted_terms)}
