@@ -13,3 +13,4 @@ alembic
 aioodbc
 python-jose[cryptography]
 passlib[bcrypt]
+pymysql

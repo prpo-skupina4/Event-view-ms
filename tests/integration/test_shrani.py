@@ -7,7 +7,7 @@ async def test_shrani_rejects_mismatched_user_id(client):
         "uporabnik_id": 999,   # != path
         "termini": []
     }
-    r = await client.post("/urniki/1/shrani", json=body)
+    r = await client.put("/urniki/1", json=body)
     assert r.status_code == 400
     assert "ne ujemata" in r.json()["detail"]
 
@@ -21,7 +21,7 @@ async def test_shrani_accepts_and_returns_count(client):
             {"termin_id": 11, "zacetek": "10:00:00", "dolzina": 60, "dan": 1, "lokacija": "P02", "tip": "AV", "predmet": None, "aktivnost": None},
         ],
     }
-    r = await client.post("/urniki/1/shrani", json=body)
+    r = await client.put("/urniki/1", json=body)
     assert r.status_code == 201
     data = r.json()
     assert data["uporabnik_id"] == 1

@@ -52,7 +52,7 @@ def health():
 
 #vrne shranjen urnik uporabnika
 @urniki.get('/{uporabnik_id}', response_model = Urnik)
-async def index(uporabnik_id:int, db: AsyncSession = Depends(get_db)):#z dependency db odpreš sejo
+def index(uporabnik_id:int, db: AsyncSession = Depends(get_db)):#z dependency db odpreš sejo
     q = (
     select(TerminiDB, PredmetiDB, AktivnostiDB)
     .join(UrnikiDB, UrnikiDB.termin_id == TerminiDB.termin_id)
@@ -62,7 +62,7 @@ async def index(uporabnik_id:int, db: AsyncSession = Depends(get_db)):#z depende
     .order_by(TerminiDB.dan.asc(), TerminiDB.zacetek.asc())
     )
 
-    res = await db.execute(q)
+    res = db.execute(q)
     rows = res.all()
 
     termini = []
@@ -85,14 +85,15 @@ async def index(uporabnik_id:int, db: AsyncSession = Depends(get_db)):#z depende
 
 #dodaj uradni urnik in termine novega uporabnika
 @urniki.post('/{uporabnik_id}', status_code = 201)
-async def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)): #ko hočeš shranit urnik
+def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)): #ko hočeš shranit urnik
     #če hoče resetirat urnik
     require_same_user(uporabnik_id, user_id)
-    await db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
+    db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
 
     #kliče ical za podatke
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        r = await client.get(f"{ICAL_BASE_URL}/podatki/uporabniki/{uporabnik_id}")
+    with httpx.Client(timeout=20.0) as client:
+        r = client.get(f"{ICAL_BASE_URL}/podatki/uporabniki/{uporabnik_id}")
+
     if r.status_code != 200:
         raise HTTPException(502, f"iCal service failed ({r.status_code})")
     
@@ -106,7 +107,7 @@ async def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), d
         predmet = t["predmet"]
         predmet_id = predmet["predmet_id"]
         #dodamo predmet, če ga ni v bazi
-        res = await db.execute(select(PredmetiDB).where(PredmetiDB.predmet_id == predmet_id))
+        res = db.execute(select(PredmetiDB).where(PredmetiDB.predmet_id == predmet_id))
         
         p = res.scalar_one_or_none()
         if p is None:#dodamo predmet in njegove termine, če ga še ni
@@ -114,12 +115,13 @@ async def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), d
             oznaka = predmet["oznaka"]
             p = PredmetiDB(predmet_id = predmet_id, oznaka=oznaka, ime=ime)
             db.add(p)
-            await db.flush()
+            db.flush()
             predmeti_dodani += 1
 
             #kliče ical za termine predmeta
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                vsi_termini = await client.get(f"{ICAL_BASE_URL}/podatki/termini/{predmet_id}")
+            with httpx.Client(timeout=20.0) as client:
+                vsi_termini = client.get(f"{ICAL_BASE_URL}/podatki/termini/{predmet_id}")
+
             if vsi_termini.status_code != 200:
                 raise HTTPException(502, f"iCal service failed ({r.status_code})")
 
@@ -135,7 +137,7 @@ async def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), d
                     dan = f["dan"]
                 )
                 db.add(nov_termin)
-                await db.flush()
+                db.flush()
                 termini_dodani += 1
 
         zacetek = time.fromisoformat(t["zacetek"])
@@ -153,7 +155,7 @@ async def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), d
                                                    TerminiDB.lokacija ==lokacija,
                                                    TerminiDB.tip == tip
                                                 )
-        res2 = await db.execute(q)
+        res2 = db.execute(q)
         termin_db = res2.scalar_one_or_none()
         #če slučajno ni termina uporabnika, ga dodamo
         if termin_db is None:
@@ -167,20 +169,20 @@ async def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), d
             )
             termin_db = nov_termin
             db.add(nov_termin)
-            await db.flush()
+            db.flush()
             termini_dodani += 1
         q = select(UrnikiDB).where(
             UrnikiDB.termin_id ==termin_db.termin_id,
             UrnikiDB.uporabnik_id == uporabnik_id
             )
-        res2 = await db.execute(q)
+        res2 = db.execute(q)
         nov_urnik = res2.scalar_one_or_none()
         if nov_urnik is None:
             db.add(UrnikiDB(uporabnik_id=uporabnik_id, termin_id=termin_db.termin_id))
-            await db.flush()
+            db.flush()
             povezave += 1
     
-    await db.commit()
+    db.commit()
 
     return { #izpiše kaj smo spremenili
         "uporabnik_id": uporabnik_id,
@@ -191,7 +193,7 @@ async def dodaj(uporabnik_id: int,user_id: int = Depends(get_current_user_id), d
 
 #dodaj predmet/aktivnost + termin
 @urniki.post('/{uporabnik_id}/termini', status_code = 201)
-async def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
+def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
     require_same_user(uporabnik_id, user_id)
     predmet = None
     aktivnost = None
@@ -208,15 +210,15 @@ async def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_curre
     termin_id = 0
     if termin.predmet is not None:
         predmet = termin.predmet
-        res = await db.execute(select(PredmetiDB).where(PredmetiDB.predmet_id == predmet.predmet_id))
+        res = db.execute(select(PredmetiDB).where(PredmetiDB.predmet_id == predmet.predmet_id))
         p = res.scalar_one_or_none()
         if p is None:
             p = PredmetiDB(predmet_id = predmet.predmet_id, oznaka=predmet.oznaka, ime=predmet.ime)
             db.add(p)
-            await db.flush()
+            db.flush()
             predmeti_dodani += 1
         
-        res = await db.execute(select(TerminiDB).where(TerminiDB.predmet_id==predmet.predmet_id, 
+        res = db.execute(select(TerminiDB).where(TerminiDB.predmet_id==predmet.predmet_id, 
                                                    TerminiDB.zacetek == termin.zacetek,
                                                    TerminiDB.dolzina == termin.dolzina,
                                                    TerminiDB.dan == termin.dan,
@@ -234,23 +236,23 @@ async def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_curre
                         tip = termin.tip)
         
             db.add(t)
-            await db.flush()
+            db.flush()
             termini_dodani += 1
         
         termin_id = t.termin_id
     else:
         aktivnost = termin.aktivnost
 
-        res = await db.execute(select(AktivnostiDB).where(AktivnostiDB.oznaka == aktivnost.oznaka,
+        res = db.execute(select(AktivnostiDB).where(AktivnostiDB.oznaka == aktivnost.oznaka,
                                                     AktivnostiDB.ime == aktivnost.ime ))
         a = res.scalar_one_or_none()
         if a is None:
             a = AktivnostiDB(oznaka=aktivnost.oznaka, ime=aktivnost.ime)
             db.add(a)
-            await db.flush() 
+            db.flush() 
             aktivnosti_dodane += 1
 
-        res = await db.execute(select(TerminiDB).where(TerminiDB.aktivnost_id == a.aktivnost_id,
+        res = db.execute(select(TerminiDB).where(TerminiDB.aktivnost_id == a.aktivnost_id,
                                                    TerminiDB.zacetek == termin.zacetek,
                                                    TerminiDB.dolzina == termin.dolzina,
                                                    TerminiDB.dan == termin.dan,
@@ -267,12 +269,12 @@ async def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_curre
                         lokacija = termin.lokacija,
                         tip = termin.tip) 
             db.add(t)
-            await db.flush()
+            db.flush()
             termini_dodani += 1
         termin_id = t.termin_id
 
 
-    res = await db.execute(
+    res = db.execute(
         select(UrnikiDB).where(
             UrnikiDB.uporabnik_id == uporabnik_id,
             UrnikiDB.termin_id == termin_id,
@@ -282,7 +284,7 @@ async def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_curre
         db.add(UrnikiDB(uporabnik_id=uporabnik_id, termin_id=termin_id))
         povezave_dodane += 1
 
-    await db.commit()
+    db.commit()
        
     return { #izpiše kaj smo spremenili
         "uporabnik_id": uporabnik_id,
@@ -294,12 +296,12 @@ async def nov(uporabnik_id: int, termin: Termin,user_id: int = Depends(get_curre
 
 #shrani nov urnik uporabnika
 @urniki.put('/{uporabnik_id}', status_code = 201)
-async def shrani(uporabnik_id: int, urnik:Urnik,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)): #ko hočeš shranit urnik
+def shrani(uporabnik_id: int, urnik:Urnik,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)): #ko hočeš shranit urnik
     require_same_user(uporabnik_id, user_id)
-    await db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
+    db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
     uporabnik_id = urnik.uporabnik_id
 
-    await db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
+    db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))
     termini = urnik.termini
     povezave = 0
     for t in termini:
@@ -308,8 +310,7 @@ async def shrani(uporabnik_id: int, urnik:Urnik,user_id: int = Depends(get_curre
         db.add(UrnikiDB(uporabnik_id=uporabnik_id, termin_id=termin_id))
         povezave += 1
     
-    await db.commit()
-
+    db.commit()
     return { #izpiše kaj smo spremenili
         "uporabnik_id": uporabnik_id,
         "spremenjene_povezave": povezave,
@@ -317,7 +318,7 @@ async def shrani(uporabnik_id: int, urnik:Urnik,user_id: int = Depends(get_curre
 
     
 @urniki.post('/optimizations/{uporabnik_id}')
-async def optimize(uporabnik_id:int, zahteve:Zahteve, db: AsyncSession = Depends(get_db)):
+def optimize(uporabnik_id:int, zahteve:Zahteve, db: AsyncSession = Depends(get_db)):
     #klici bazo
     q = (
         select(TerminiDB, PredmetiDB, AktivnostiDB)
@@ -326,7 +327,7 @@ async def optimize(uporabnik_id:int, zahteve:Zahteve, db: AsyncSession = Depends
         .outerjoin(AktivnostiDB, AktivnostiDB.aktivnost_id == TerminiDB.aktivnost_id)
         .where(UrnikiDB.uporabnik_id == uporabnik_id)
     )
-    res = await db.execute(q)
+    res = db.execute(q)
     rows = res.all()
     
     urnik = [
@@ -361,7 +362,7 @@ async def optimize(uporabnik_id:int, zahteve:Zahteve, db: AsyncSession = Depends
             .where(or_(*iskanje))
         )
     
-        res = await db.execute(q)
+        res = db.execute(q)
         odg = res.all()
 
         termini = [
@@ -387,8 +388,11 @@ async def optimize(uporabnik_id:int, zahteve:Zahteve, db: AsyncSession = Depends
 
     u = Urnik(uporabnik_id=uporabnik_id, termini= urnik)
     sporocilo = OptimizeRequest(uporabnik_id = uporabnik_id, urnik=u, zahteve=zahteve, termini=termini)
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        odg = await client.post(OPTIMIZER_URL,json=jsonable_encoder(sporocilo))
+    with httpx.Client(timeout=20.0) as client:
+        odg = client.post(
+            OPTIMIZER_URL,
+            json=jsonable_encoder(sporocilo)
+        )
     if odg.status_code != 200:
         raise HTTPException(status_code=odg.status_code, detail=odg.text)
 
@@ -397,20 +401,20 @@ async def optimize(uporabnik_id:int, zahteve:Zahteve, db: AsyncSession = Depends
 
 
 @urniki.delete("/{uporabnik_id}", status_code=200)
-async def odstrani_urnik(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
+def odstrani_urnik(uporabnik_id: int,user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
    
     require_same_user(uporabnik_id, user_id)
 
     user_term_ids_q = select(UrnikiDB.termin_id).where(UrnikiDB.uporabnik_id == uporabnik_id)#vsi termini uporabnika
-    user_term_ids = (await db.execute(user_term_ids_q)).scalars().all()
+    user_term_ids = (db.execute(user_term_ids_q)).scalars().all()
 
     if not user_term_ids:
         return {"ok": True, "deleted_links": 0, "deleted_terms": 0}
 
 
-    await db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))    # (opcijsko) preveri, koliko zapisov ima uporabnik
+    db.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id))    # (opcijsko) preveri, koliko zapisov ima uporabnik
     count_q = select(func.count()).select_from(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id)
-    n = (await db.execute(count_q)).scalar_one()
+    n = (db.execute(count_q)).scalar_one()
 
     only_this_user_terms_q = (
         select(UrnikiDB.termin_id)
@@ -418,20 +422,20 @@ async def odstrani_urnik(uporabnik_id: int,user_id: int = Depends(get_current_us
         .group_by(UrnikiDB.termin_id)
         .having(func.count() == 1)
     )
-    only_this_user_term_ids = (await db.execute(only_this_user_terms_q)).scalars().all()
+    only_this_user_term_ids = ( db.execute(only_this_user_terms_q)).scalars().all()
 
-    del_links_res = await db.execute(
+    del_links_res =  db.execute(
         delete(UrnikiDB).where(UrnikiDB.uporabnik_id == uporabnik_id)
     )
     deleted_links = del_links_res.rowcount or 0
     deleted_terms = 0
     if only_this_user_term_ids:
-        del_terms_res = await db.execute(
+        del_terms_res = db.execute(
             delete(TerminiDB).where(TerminiDB.termin_id.in_(only_this_user_term_ids))
         )
         deleted_terms = del_terms_res.rowcount or 0
 
-    await db.commit()
+    db.commit()
 
     return {
         "ok": True,
