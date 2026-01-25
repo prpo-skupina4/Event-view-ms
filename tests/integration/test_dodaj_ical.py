@@ -6,7 +6,7 @@ from httpx import Response
 
 from app.db.models import PredmetiDB
 
-ICAL_BASE_URL = os.getenv("ICAL_URL")
+ICAL_BASE_URL = "http://ical:8000"
 @pytest.mark.anyio
 @respx.mock
 async def test_dodaj_calls_ical_and_creates_subjects(client, db_session):
