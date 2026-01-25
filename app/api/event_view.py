@@ -26,7 +26,7 @@ ALGORITHM = "HS256"
 
 urniki = APIRouter()
 ICAL_BASE_URL = os.getenv("ICAL_URL", "http://ical:8000")
-OPTIMIZER_URL = os.getenv("OPTIMIZER_URL", "http://optimizer:8000/")
+OPTIMIZER_URL = os.getenv("OPTIMIZER_URL", "http://optimizer:8000")
 
 #za varnost
 def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
@@ -390,7 +390,7 @@ def optimize(uporabnik_id:int, zahteve:Zahteve, db: Session  = Depends(get_db)):
     sporocilo = OptimizeRequest(uporabnik_id = uporabnik_id, urnik=u, zahteve=zahteve, termini=termini)
     with httpx.Client(timeout=20.0) as client:
         odg = client.post(
-            f"{OPTIMIZER_URL}/optimizacije",
+            f"{OPTIMIZER_URL}/optimizacije/",
             json=jsonable_encoder(sporocilo)
         )
     if odg.status_code != 200:

@@ -13,16 +13,14 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# >>> TO JE PRAV PRI TEBI <<<
 from app.db.database import Base
-import app.db.models  # pomembno: da so modeli uvoženi
+import app.db.models  
 target_metadata = Base.metadata
 
 
 def get_url() -> str:
     url = os.getenv("DATABASE_URL")
     if not url:
-        # fallback (če bi slučajno hotela brati iz alembic.ini)
         url = config.get_main_option("sqlalchemy.url")
     if not url:
         raise RuntimeError("DATABASE_URL is not set (and sqlalchemy.url is empty)")
