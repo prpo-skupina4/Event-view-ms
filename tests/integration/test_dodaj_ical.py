@@ -2,15 +2,22 @@
 import pytest
 import respx
 from httpx import Response
+from sqlalchemy import delete
 
+from app.db.models import PredmetiDB, TerminiDB, UrnikiDB
 
-from app.db.models import PredmetiDB
 
 ICAL_BASE_URL = "http://ical:8000"
+
+
 @pytest.mark.anyio
 @respx.mock
 async def test_dodaj_calls_ical_and_creates_subjects(client, db_session):
-    await db_session.commit()
+    db_session.execute(delete(UrnikiDB).where(UrnikiDB.uporabnik_id == 7))
+    db_session.execute(delete(TerminiDB).where(TerminiDB.predmet_id == 1))
+    db_session.execute(delete(PredmetiDB).where(PredmetiDB.predmet_id == 1))
+    db_session.commit()
+
     # iCal mock: uporabnik dobi 1 termin iz predmeta 1
     respx.get(f"{ICAL_BASE_URL}/podatki/uporabniki/7").mock(
         return_value=Response(
@@ -54,6 +61,5 @@ async def test_dodaj_calls_ical_and_creates_subjects(client, db_session):
     assert data["uporabnik_id"] == 7
     assert data["predmeti_dodani"] >= 1
 
-    # DB assert: predmet obstaja
-    p = await db_session.get(PredmetiDB, 1)
+    p = db_session.get(PredmetiDB, 1)
     assert p is not None
